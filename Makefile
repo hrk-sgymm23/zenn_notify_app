@@ -1,5 +1,8 @@
 PHONY: build run build-run
 
-# Docker Composeでコンテナを起動するターゲット
+init:
+	cd src
+	go mod init zenn_notify_app
+
 run:
 	docker-compose up --build
