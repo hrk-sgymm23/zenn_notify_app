@@ -2,3 +2,4 @@
 .terraform
 envs/prd/.terraform/
 .terraform.lock.hcl
+tfresources/envs/prd/.terraform/
