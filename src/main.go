@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/joho/godotenv"
+	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/slack-go/slack"
 )
 
@@ -62,12 +63,8 @@ func postToSlack(token, channel, message string) error {
 	return nil
 }
 
-func main() {
-	// Load environment variables from .env file
-	if err := godotenv.Load(); err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
-	}
-
+// handler is the entry point for the AWS Lambda function.
+func handler(ctx context.Context) error {
 	// Read environment variables
 	zennAPIURL := os.Getenv("ZENN_API_URL")
 	slackToken := os.Getenv("SLACK_TOKEN")
@@ -75,13 +72,13 @@ func main() {
 
 	// Validate required environment variables
 	if zennAPIURL == "" || slackToken == "" || slackChannel == "" {
-		log.Fatal("Missing required environment variables: ZENN_API_URL, SLACK_TOKEN, SLACK_CHANNEL")
+		return fmt.Errorf("missing required environment variables: ZENN_API_URL, SLACK_TOKEN, SLACK_CHANNEL")
 	}
 
 	// Fetch articles from Zenn API
 	articles, err := fetchArticles(zennAPIURL)
 	if err != nil {
-		log.Fatalf("Failed to fetch articles: %v", err)
+		return fmt.Errorf("failed to fetch articles: %w", err)
 	}
 
 	// Select a random article
@@ -95,8 +92,13 @@ func main() {
 
 	// Post the message to Slack
 	if err := postToSlack(slackToken, slackChannel, message); err != nil {
-		log.Fatalf("Failed to post to Slack: %v", err)
+		return fmt.Errorf("failed to post to Slack: %w", err)
 	}
 
-	fmt.Println("Message posted successfully!")
+	log.Println("Message posted successfully!")
+	return nil
+}
+
+func main() {
+	lambda.Start(handler)
 }
