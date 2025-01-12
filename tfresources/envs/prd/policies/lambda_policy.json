@@ -7,7 +7,9 @@
             "Action": [
                 "logs:*",
                 "ec2:*",
-                "lambda:*"
+                "lambda:*",
+                "ssm:*",
+                "kms:*"
             ],
             "Resource": "*"
         }
