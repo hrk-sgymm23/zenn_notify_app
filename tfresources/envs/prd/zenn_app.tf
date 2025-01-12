@@ -1,4 +1,6 @@
 # IAMリソース関連
+
+# Lambda実行ロール
 resource "aws_iam_role" "lambda_role" {
   name               = "${var.common_name}-lambda-role"
   assume_role_policy = file("${path.module}/policies/lambda_assume_policy.json")
@@ -13,6 +15,13 @@ resource "aws_iam_role_policy_attachment" "name" {
   role       = aws_iam_role.lambda_role.id
   policy_arn = aws_iam_policy.lambda_policy.arn
 }
+
+# Scheduler用ロール
+resource "aws_iam_role" "scheduler_assume_role" {
+  name               = "${var.common_name}-lambda-scheduler-assume-role"
+  assume_role_policy = file("${path.module}/policies/eb_assume_policy.json")
+}
+
 
 # lambdaリソース関連
 resource "terraform_data" "build_lambda" {
@@ -46,4 +55,17 @@ module "zenn_app" {
   common_name   = "zenn_app"
   code_hash     = data.archive_file.lambda.output_base64sha256
   environment   = "prd"
+}
+
+resource "aws_scheduler_schedule" "exec_lambda" {
+  name                = "${var.common_name}-exec-${var.environment}"
+  schedule_expression = "cron(0 23 * * ? *)"
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = module.zenn_app.lambda_arn
+    role_arn = aws_iam_role.scheduler_assume_role.arn
+  }
 }

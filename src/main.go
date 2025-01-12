@@ -7,10 +7,12 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/ssm"
 	"github.com/slack-go/slack"
 )
 
@@ -25,6 +27,26 @@ type Article struct {
 // Response represents the structure of the API response.
 type Response struct {
 	Articles []Article `json:"articles"`
+}
+
+// fetchParameter fetches a parameter value from AWS SSM Parameter Store.
+func fetchParameter(name string, withDecryption bool) (string, error) {
+	// セッション作成
+	sess, err := session.NewSession(&aws.Config{Region: aws.String("ap-northeast-1")})
+	if err != nil {
+		return "", fmt.Errorf("failed to create AWS session: %w", err)
+	}
+
+	svc := ssm.New(sess)
+	res, err := svc.GetParameter(&ssm.GetParameterInput{
+		Name:           aws.String(name),
+		WithDecryption: aws.Bool(withDecryption),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch parameter %s: %w", name, err)
+	}
+
+	return *res.Parameter.Value, nil
 }
 
 // fetchArticles fetches articles from the Zenn API.
@@ -65,14 +87,20 @@ func postToSlack(token, channel, message string) error {
 
 // handler is the entry point for the AWS Lambda function.
 func handler(ctx context.Context) error {
-	// Read environment variables
-	zennAPIURL := os.Getenv("ZENN_API_URL")
-	slackToken := os.Getenv("SLACK_TOKEN")
-	slackChannel := os.Getenv("SLACK_CHANNEL")
+	// Fetch parameters from AWS SSM Parameter Store
+	zennAPIURL, err := fetchParameter("ZENN_API_URL", false)
+	if err != nil {
+		return fmt.Errorf("failed to fetch ZENN_API_URL: %w", err)
+	}
 
-	// Validate required environment variables
-	if zennAPIURL == "" || slackToken == "" || slackChannel == "" {
-		return fmt.Errorf("missing required environment variables: ZENN_API_URL, SLACK_TOKEN, SLACK_CHANNEL")
+	slackToken, err := fetchParameter("SLACK_TOKEN", true)
+	if err != nil {
+		return fmt.Errorf("failed to fetch SLACK_TOKEN: %w", err)
+	}
+
+	slackChannel, err := fetchParameter("SLACK_CHANNEL", false)
+	if err != nil {
+		return fmt.Errorf("failed to fetch SLACK_CHANNEL: %w", err)
 	}
 
 	// Fetch articles from Zenn API
