@@ -22,10 +22,19 @@ resource "aws_iam_role" "scheduler_assume_role" {
   assume_role_policy = file("${path.module}/policies/eb_assume_policy.json")
 }
 
+resource "aws_iam_policy" "invoke_function_policy" {
+  name   = "${var.common_name}-lambda-invoke-policy"
+  policy = file("${path.module}/policies/invoke_policy.json")
+}
+
+resource "aws_iam_role_policy_attachment" "InvokeFunction" {
+  role       = aws_iam_role.scheduler_assume_role.id
+  policy_arn = aws_iam_policy.invoke_function_policy.arn
+}
+
 
 # lambdaリソース関連
 resource "terraform_data" "build_lambda" {
-  // ファイルに変更があった場合のみ以下を実行
   triggers_replace = {
     file_content = md5(file("../../../src/main.go")) // 相対パスでLambdaファイルを指定
     // ファイルでなくディレクトリを指定したい場合は以下
@@ -58,8 +67,9 @@ module "zenn_app" {
 }
 
 resource "aws_scheduler_schedule" "exec_lambda" {
-  name                = "${var.common_name}-exec-${var.environment}"
-  schedule_expression = "cron(0 23 * * ? *)"
+  name                         = "${var.common_name}-exec-${var.environment}"
+  schedule_expression_timezone = "Asia/Tokyo"
+  schedule_expression          = "cron(45 7 * * ? *)"
   flexible_time_window {
     mode = "OFF"
   }
@@ -68,4 +78,12 @@ resource "aws_scheduler_schedule" "exec_lambda" {
     arn      = module.zenn_app.lambda_arn
     role_arn = aws_iam_role.scheduler_assume_role.arn
   }
+}
+
+resource "aws_lambda_permission" "zenn_app" {
+  action        = "lambda:InvokeFunction"
+  statement_id  = "${var.common_name}-exec-${var.environment}-sceduler-permittion"
+  function_name = module.zenn_app.lambda_name
+  principal     = "scheduler.amazonaws.com"
+  source_arn    = aws_scheduler_schedule.exec_lambda.arn
 }
